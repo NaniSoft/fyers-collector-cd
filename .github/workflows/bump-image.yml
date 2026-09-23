@@ -1,0 +1,67 @@
+name: bump-image
+
+# Pins the collector image tag in the VPS overlay. Triggered by the app repo's
+# release workflow (repository_dispatch 'image-published'), or by hand.
+on:
+  repository_dispatch:
+    types: [image-published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to pin (e.g. 1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bump-image
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: pin image tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+
+      - name: Resolve the tag
+        id: tag
+        env:
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG="${DISPATCH_TAG:-$INPUT_TAG}"
+          if [ -z "$TAG" ]; then
+            echo "::error::no tag supplied (repository_dispatch client_payload.tag or inputs.tag)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Pinning image tag: $TAG"
+
+      - name: Bump chart/values-vps.yaml
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          sed -i -E "s|^  tag: .*|  tag: ${TAG}|" chart/values-vps.yaml
+          # Fail loudly if the edit produced an invalid overlay.
+          helm template fyers chart/ -f chart/values-vps.yaml \
+            --set-file configYaml=config.example.yaml >/dev/null
+          git --no-pager diff -- chart/values-vps.yaml
+
+      - name: Commit & push
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chart/values-vps.yaml
+          if git diff --cached --quiet; then
+            echo "already pinned to ${TAG} — nothing to commit"
+          else
+            git commit -m "chore: pin image tag to ${TAG}"
+            git push
+          fi

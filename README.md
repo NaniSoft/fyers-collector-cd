@@ -81,11 +81,32 @@ kubectl create secret generic fyers-rclone \
 yet. It carries the open questions (second Fyers app for `http://<vps-ip>:8001`,
 firewall + callback security, real storage class). Don't deploy it yet.
 
+## CI/CD
+
+| Workflow | Trigger | Does |
+|---|---|---|
+| `lint.yml` | push to `main`, PRs | `helm lint` + `helm template` on both overlays, and a `sh -n` syntax check of `deploy.sh` |
+| `bump-image.yml` | `repository_dispatch: image-published`, or manual | pins the image tag in `chart/values-vps.yaml` and commits it |
+
+The app repo's release workflow dispatches the tag here:
+
+```
+fyers-collector (tag v1.2.3)
+  └─ push ghcr.io/nanisoft/fyers-collector:1.2.3
+  └─ repository_dispatch -> fyers-collector-cd
+       └─ bump-image.yml: chart/values-vps.yaml  image.tag: 1.2.3
+```
+
+To pin by hand: **Actions → bump-image → Run workflow** and give it a tag
+(e.g. `1.2.3`).
+
+ArgoCD (or a manual `helm upgrade`) then syncs `chart/values-vps.yaml`.
+
 ## GitOps
 
 `argocd/application.yaml` is a starting-point template. ArgoCD cannot use
 `--set-file`, so the target values file must inline `configYaml`. Wire it up once
-CI exists to bump `image.tag`.
+the VPS cluster exists.
 
 ## Layout
 

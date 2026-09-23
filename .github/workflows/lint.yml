@@ -1,0 +1,37 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  helm:
+    name: helm lint & template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+
+      # config.example.yaml stands in for the real config.yaml (non-secret, and
+      # never committed) so the ConfigMap template renders.
+      - name: Lint
+        run: helm lint chart/ -f chart/values-local.yaml --set-file configYaml=config.example.yaml
+
+      - name: Template (local overlay)
+        run: helm template fyers chart/ -f chart/values-local.yaml --set-file configYaml=config.example.yaml >/dev/null
+
+      - name: Template (vps overlay)
+        run: helm template fyers chart/ -f chart/values-vps.yaml --set-file configYaml=config.example.yaml >/dev/null
+
+      - name: Syntax-check deploy.sh
+        run: sh -n deploy.sh
