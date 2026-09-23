@@ -1,0 +1,19 @@
+{{- if not .Values.storage.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "fyers-collector.fullname" . }}-data
+  labels:
+    {{- include "fyers-collector.name" . | nindent 4 }}
+spec:
+  accessModes:
+    # ReadWriteOnce is correct, not a compromise: local-path is RWO-only and an
+    # RWX claim pends forever, silently. One pod owns the data anyway.
+    - ReadWriteOnce
+  {{- with .Values.storage.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+{{- end }}

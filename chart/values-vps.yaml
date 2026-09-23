@@ -1,0 +1,30 @@
+# values-vps.yaml — VPS overlay (k3s). PLACEHOLDER: the VPS does not exist yet.
+#
+# Open questions this file graduates with:
+#   - a SECOND Non-trading Fyers app (one redirect URI per app) carrying
+#     http://<vps-ip>:8001/callback; same creds or new ones?
+#   - the callback port open on the VPS firewall (the user's own browser must
+#     reach it) + callback-endpoint security on a public interface
+#   - a real storage class; nodeSelector dropped (single-node k3s)
+#   - a config.yaml whose auth.callback_base_url = http://<vps-ip>:8001
+
+image:
+  repository: ghcr.io/nanisoft/fyers-collector
+  tag: latest                 # pin a release tag / digest at deploy time
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 8001
+
+nodeSelector: {}
+
+storage:
+  existingClaim: ""           # create a fresh claim on the VPS
+  size: 20Gi
+  storageClass: ""            # cluster default
+  fixPermissions: false       # real Linux storage class; fsGroup is enough
+
+rclone:
+  enabled: true               # VPS has a real rclone config (expected)
+  existingSecret: fyers-rclone

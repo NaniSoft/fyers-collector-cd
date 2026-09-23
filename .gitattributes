@@ -1,0 +1,4 @@
+# Shell scripts must keep LF on every platform — CRLF breaks the shebang
+# (`/usr/bin/env bash\r` -> "bad interpreter: No such file or directory").
+*.sh         text eol=lf
+deploy.sh    text eol=lf

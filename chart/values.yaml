@@ -1,0 +1,46 @@
+# values.yaml — the chart's whole interface. Every k8s quirk learned on the
+# Docker Desktop cluster is handled inside templates/, not here.
+
+# --- image: the merged collector (per-minute capture + OAuth token callback) ---
+image:
+  repository: ghcr.io/nanisoft/fyers-collector
+  tag: latest            # CI/CD should pin a git sha or release tag
+  pullPolicy: IfNotPresent
+replicas: 1
+resources:
+  requests: {cpu: 250m, memory: 768Mi}
+  limits: {cpu: "1", memory: 2Gi}
+
+# --- the OAuth callback listener (also the /healthz liveness endpoint) ---
+# The port MUST equal the one in FYERS_REDIRECT_URI: the Fyers app registration
+# is byte-exact. LoadBalancer publishes it on host loopback on Docker Desktop;
+# the VPS overlay switches to NodePort.
+service:
+  type: LoadBalancer
+  port: 8001
+  annotations: {}
+
+# --- data: SQLite daily files + the token file + archive share ONE claim ---
+# ReadWriteOnce is correct, not a compromise: local-path is RWO-only and an RWX
+# claim pends forever, silently. One pod owns the data anyway.
+storage:
+  existingClaim: fyers-data   # reuse an existing claim; empty = create one
+  size: 10Gi
+  storageClass: ""            # cluster default
+  fixPermissions: false       # root initContainer chown (needed on local-path)
+
+# --- placement: pin the node that owns the PV (single-node clusters: leave {}) ---
+nodeSelector: {}
+
+# --- secrets: created OUTSIDE helm ---
+envSecret:
+  name: fyers-env             # kubectl create secret generic fyers-env --from-file=.env=.env
+rclone:
+  enabled: false              # true = give the collector its gdrive credentials
+  existingSecret: fyers-rclone
+  configKey: rclone.conf      # kubectl create secret generic fyers-rclone --from-file=rclone.conf=<path>
+
+# Runtime config content — REQUIRED at install time; keeps config.yaml the
+# single source of truth (no copy drift into the chart):
+#   helm upgrade --install fyers chart/ --set-file configYaml=config.yaml
+configYaml: ""

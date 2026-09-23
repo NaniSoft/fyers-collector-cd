@@ -1,0 +1,26 @@
+# values-local.yaml — Docker Desktop / kind overlay (the current live cluster).
+#
+#   deploy.sh            # build fyers-collector:local, load into the nodes, install
+#
+# The image is built locally (no registry) and streamed into the kind nodes;
+# IfNotPresent keeps a same-tag rebuild from reaching the cluster unless
+# deploy.sh loads it (the ticket-07 fact).
+
+image:
+  repository: fyers-collector
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer          # Docker Desktop publishes host 127.0.0.1:8001
+
+nodeSelector:
+  kubernetes.io/hostname: desktop-worker   # the PV is nodeAffinity-pinned
+
+storage:
+  existingClaim: fyers-data
+  fixPermissions: true        # local-path dirs are root-owned
+
+rclone:
+  enabled: true
+  existingSecret: fyers-rclone

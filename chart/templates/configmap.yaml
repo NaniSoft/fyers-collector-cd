@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "fyers-collector.fullname" . }}-config
+  labels:
+    {{- include "fyers-collector.name" . | nindent 4 }}
+data:
+  # Mounted at /app/config.yaml — the collector reads it via --config. The chart
+  # never carries a copy: pass the real file with
+  #   helm upgrade --install <release> chart/ --set-file configYaml=config.yaml
+  config.yaml: |
+    {{- required "configYaml is required: pass --set-file configYaml=config.yaml (or set it in a values file)" .Values.configYaml | nindent 4 }}

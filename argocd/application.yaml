@@ -1,0 +1,42 @@
+# ArgoCD Application — GitOps template for the merged collector.
+#
+# This is a STARTING POINT, not wired up yet: the VPS/k3s cluster does not exist
+# and no CI pushes image tags. When CI lands, have it bump `image.tag` in a
+# values file here (or pass a commit-pinned overlay), then ArgoCD syncs.
+#
+#   kubectl apply -f argocd/application.yaml
+#
+# `configYaml` cannot be passed with --set-file through ArgoCD, so the target
+# values file must inline it:
+#   configYaml: |
+#     symbols:
+#       ...
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fyers-collector
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/NaniSoft/fyers-collector-cd.git
+    targetRevision: main
+    path: chart
+    helm:
+      valueFiles:
+        - values-vps.yaml
+      # Inline the non-secret runtime config here (or in the values file):
+      # values: |
+      #   configYaml: |
+      #     symbols:
+      #       - underlying: NIFTY
+      #         ...
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fyers
+  syncPolicy:
+    automated:
+      prune: false        # never prune: the chart must not delete the data PVC
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

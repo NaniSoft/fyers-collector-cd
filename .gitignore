@@ -1,0 +1,10 @@
+# Local, environment-specific files — never commit these.
+.env
+*.env
+config.yaml
+rclone.conf
+
+# Rendered output / local scratch
+rendered.yaml
+*.tgz
+.DS_Store

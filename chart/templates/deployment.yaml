@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fyers-collector.fullname" . }}
+  labels:
+    {{- include "fyers-collector.name" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+  annotations:
+    # A config.yaml edit re-rolls the pod.
+    checksum/config: {{ .Values.configYaml | sha256sum }}
+spec:
+  replicas: {{ .Values.replicas }}
+  # Recreate: two collectors would share one Fyers quota pool, fight over the
+  # daily SQLite file, and both try to own the callback port.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fyers-collector
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "fyers-collector.name" . | nindent 8 }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      {{- if .Values.storage.fixPermissions }}
+      # local-path provisions root-owned dirs a non-root pod can't write, so a
+      # root initContainer fixes ownership once per pod start.
+      initContainers:
+        - name: fix-data-permissions
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["sh", "-c", "mkdir -p /app/data && chown -R 1000:1000 /app/data"]
+          securityContext:
+            runAsNonRoot: false   # container-level override or kubelet rejects the root chown
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      {{- end }}
+      containers:
+        - name: collector
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Explicit paths: no repo checkout exists in-image.
+          args:
+            - "--config"
+            - "/app/config.yaml"
+            - "--env"
+            - "/app/.env"
+            - "--data-dir"
+            - "/app/data"
+            - "--master"
+            - "/app/data/sym_master.json"
+          env:
+            # Bind 0.0.0.0 in-pod so the Service can reach the callback; the
+            # Fyers-registered redirect stays http://127.0.0.1:8001/callback —
+            # that is the browser-side URL and never the pod bind.
+            - name: FYERS_BIND_URL
+              value: http://0.0.0.0:{{ .Values.service.port }}
+            {{- if .Values.rclone.enabled }}
+            - name: RCLONE_CONFIG
+              value: /app/rclone/{{ .Values.rclone.configKey }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          # The HTTP surface is a trivial endpoint; it stays responsive while the
+          # capture loop is blocked (candles/backup run on their own tasks), so
+          # this only fires when the listener is genuinely dead.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: data            # SHARED claim: history + token file live here
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+            - name: env
+              mountPath: /app/.env
+              subPath: .env
+            - name: logs
+              mountPath: /app/logs
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.rclone.enabled }}
+            - name: rclone
+              mountPath: /app/rclone
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "fyers-collector.dataClaim" . }}
+        - name: config
+          configMap:
+            name: {{ include "fyers-collector.fullname" . }}-config
+        - name: env
+          secret:
+            secretName: {{ .Values.envSecret.name }}
+        - name: logs
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.rclone.enabled }}
+        - name: rclone
+          secret:
+            secretName: {{ .Values.rclone.existingSecret }}
+        {{- end }}
