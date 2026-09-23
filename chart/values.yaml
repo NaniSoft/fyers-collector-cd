@@ -2,10 +2,14 @@
 # Docker Desktop cluster is handled inside templates/, not here.
 
 # --- image: the merged collector (per-minute capture + OAuth token callback) ---
+# The tag is the single source of truth for the deployed version: CI's
+# bump-image workflow pins it here on every release, and the overlays inherit it.
 image:
   repository: ghcr.io/nanisoft/fyers-collector
-  tag: latest            # CI/CD should pin a git sha or release tag
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
+  # imagePullSecrets: []      # add one if the GHCR package is private
+
 replicas: 1
 resources:
   requests: {cpu: 250m, memory: 768Mi}
@@ -27,7 +31,7 @@ storage:
   existingClaim: fyers-data   # reuse an existing claim; empty = create one
   size: 10Gi
   storageClass: ""            # cluster default
-  fixPermissions: false       # root initContainer chown (needed on local-path)
+  fixPermissions: false       # root initContainer chown (needed on fresh local-path)
 
 # --- placement: pin the node that owns the PV (single-node clusters: leave {}) ---
 nodeSelector: {}
@@ -40,7 +44,8 @@ rclone:
   existingSecret: fyers-rclone
   configKey: rclone.conf      # kubectl create secret generic fyers-rclone --from-file=rclone.conf=<path>
 
-# Runtime config content — REQUIRED at install time; keeps config.yaml the
-# single source of truth (no copy drift into the chart):
-#   helm upgrade --install fyers chart/ --set-file configYaml=config.yaml
+# Runtime config content — REQUIRED at install time. The repo ships the real
+# (non-secret) config.yaml, so deploy.sh passes it straight through:
+#   helm upgrade --install fyers chart/ -f chart/values-local.yaml \
+#       --set-file configYaml=config.yaml
 configYaml: ""

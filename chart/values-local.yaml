@@ -1,25 +1,23 @@
-# values-local.yaml — Docker Desktop / kind overlay (the current live cluster).
+# values-local.yaml — the Docker Desktop cluster (the "docker system").
 #
-#   deploy.sh            # build fyers-collector:local, load into the nodes, install
+# Deploys the PUBLISHED image from GHCR; the tag comes from values.yaml (CI
+# bumps it). Nothing here reads the app source checkout.
 #
-# The image is built locally (no registry) and streamed into the kind nodes;
-# IfNotPresent keeps a same-tag rebuild from reaching the cluster unless
-# deploy.sh loads it (the ticket-07 fact).
-
-image:
-  repository: fyers-collector
-  tag: local
-  pullPolicy: IfNotPresent
+#   ./deploy.sh                 # secrets + helm install, published image
+#
+# For the inner dev loop (a locally-built image instead of the release):
+#   docker build -t fyers-collector:local ../fyers-collector
+#   ./deploy.sh install --set image.repository=fyers-collector --set image.tag=local
 
 service:
   type: LoadBalancer          # Docker Desktop publishes host 127.0.0.1:8001
 
 nodeSelector:
-  kubernetes.io/hostname: desktop-worker   # the PV is nodeAffinity-pinned
+  kubernetes.io/hostname: desktop-worker   # the PV is nodeAffinity-pinned to it
 
 storage:
   existingClaim: fyers-data
-  fixPermissions: true        # local-path dirs are root-owned
+  fixPermissions: false       # the claim is already owned by uid 1000
 
 rclone:
   enabled: true

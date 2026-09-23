@@ -1,10 +1,12 @@
 # Local, environment-specific files — never commit these.
 .env
 *.env
-config.yaml
 rclone.conf
 
 # Rendered output / local scratch
 rendered.yaml
 *.tgz
 .DS_Store
+
+# NOTE: config.yaml IS committed — it is the deployed (non-secret) runtime
+# config, and the source of truth for what the cluster runs.

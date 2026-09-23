@@ -22,16 +22,15 @@ jobs:
 
       - uses: azure/setup-helm@v5
 
-      # config.example.yaml stands in for the real config.yaml (non-secret, and
-      # never committed) so the ConfigMap template renders.
+      # config.yaml is committed (non-secret) — it is what the cluster runs.
       - name: Lint
-        run: helm lint chart/ -f chart/values-local.yaml --set-file configYaml=config.example.yaml
+        run: helm lint chart/ -f chart/values-local.yaml --set-file configYaml=config.yaml
 
       - name: Template (local overlay)
-        run: helm template fyers chart/ -f chart/values-local.yaml --set-file configYaml=config.example.yaml >/dev/null
+        run: helm template fyers chart/ -f chart/values-local.yaml --set-file configYaml=config.yaml >/dev/null
 
       - name: Template (vps overlay)
-        run: helm template fyers chart/ -f chart/values-vps.yaml --set-file configYaml=config.example.yaml >/dev/null
+        run: helm template fyers chart/ -f chart/values-vps.yaml --set-file configYaml=config.yaml >/dev/null
 
       - name: Syntax-check deploy.sh
         run: sh -n deploy.sh

@@ -1,32 +1,39 @@
 #!/usr/bin/env sh
 # Deploy the merged Fyers collector (capture + OAuth token callback in one pod).
 #
-#   ./deploy.sh                 # build + load + secrets + helm install
-#   ./deploy.sh build           # just build + load the image into the nodes
-#   ./deploy.sh secrets         # just sync .env (and rclone) into the cluster
+#   ./deploy.sh                 # secrets + helm install (PUBLISHED GHCR image)
+#   ./deploy.sh secrets         # sync .env (and rclone) into the cluster
 #   ./deploy.sh install         # just helm upgrade --install
+#   ./deploy.sh build           # build a LOCAL image + load it (dev loop only)
 #
 # Inputs (all overridable by env):
-#   APP_DIR    app checkout to build the image from   (default ../fyers-collector)
-#   IMAGE      image ref for a local build            (default fyers-collector:local)
-#   VALUES     values overlay                          (default chart/values-local.yaml)
-#   CONFIG     non-secret config.yaml                  (default ./config.yaml)
-#   ENV_FILE   the .env secret file                    (default ./.env)
+#   VALUES      values overlay         (default chart/values-local.yaml)
+#   CONFIG      runtime config         (default ./config.yaml, committed)
+#   ENV_FILE    the .env secret file   (default ./.env)
 #   RCLONE_CONF rclone.conf (optional, for Drive backup)
-#   RELEASE    helm release name                       (default fyers)
+#   RELEASE     helm release name      (default fyers-collector)
+#   IMAGE       local image ref        (default fyers-collector:local)
+#   APP_DIR     app checkout for `build` (default ../fyers-collector)
 #
-# Secrets live OUTSIDE helm: `fyers-env` (the whole .env as one file) and
-# optional `fyers-rclone`. The data PVC is shared with any previous release.
+# The published image comes from ghcr.io — the tag is pinned in
+# chart/values.yaml and bumped by CI. Nothing here reads the app source.
+#
+# `build` is only for the inner dev loop; pair it with:
+#   ./deploy.sh install --set image.repository=fyers-collector --set image.tag=local
+#
+# NEVER `helm uninstall fyers` — that OLD release's chart owns the fyers-data
+# PVC and uninstall would DELETE the history. This chart only ever mounts it via
+# storage.existingClaim, so THIS release (fyers-collector) is safe to uninstall.
 set -eu
 
-APP_DIR="${APP_DIR:-../fyers-collector}"
-IMAGE="${IMAGE:-fyers-collector:local}"
 VALUES="${VALUES:-chart/values-local.yaml}"
 CONFIG="${CONFIG:-./config.yaml}"
 ENV_FILE="${ENV_FILE:-./.env}"
-RELEASE="${RELEASE:-fyers}"
+RELEASE="${RELEASE:-fyers-collector}"
+IMAGE="${IMAGE:-fyers-collector:local}"
+APP_DIR="${APP_DIR:-../fyers-collector}"
 
-[ -f "$CONFIG" ] || { echo "ERROR: $CONFIG missing (copy config.example.yaml)"; exit 1; }
+[ -f "$CONFIG" ] || { echo "ERROR: $CONFIG missing (it should be committed)"; exit 1; }
 
 load() {
     # kind nodes keep their OWN containerd image store: a host rebuild under the
@@ -42,10 +49,11 @@ load() {
 build() {
     docker build -t "$IMAGE" "$APP_DIR"
     load "$IMAGE"
+    echo "NOTE: install with --set image.repository=${IMAGE%:*} --set image.tag=${IMAGE##*:}"
 }
 
 secrets() {
-    [ -f "$ENV_FILE" ] || { echo "ERROR: $ENV_FILE missing (copy .env.example)"; exit 1; }
+    [ -f "$ENV_FILE" ] || { echo "ERROR: $ENV_FILE missing (Fyers/Telegram secrets)"; exit 1; }
     # .env rides into the pod as a FILE at /app/.env (the app reads the file; no
     # app code changes for k8s). Idempotent re-apply.
     kubectl create secret generic fyers-env \
@@ -78,6 +86,6 @@ case "${1:-all}" in
     build)   build ;;
     secrets) secrets ;;
     install) shift; install_chart "$@" ;;
-    all)     build; secrets; install_chart ;;
+    all)     secrets; install_chart ;;
     *) echo "usage: $0 [build|secrets|install|all]"; exit 2 ;;
 esac

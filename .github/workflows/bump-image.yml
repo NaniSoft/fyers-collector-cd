@@ -42,15 +42,15 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Pinning image tag: $TAG"
 
-      - name: Bump chart/values-vps.yaml
+      - name: Bump chart/values.yaml
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          sed -i -E "s|^  tag: .*|  tag: ${TAG}|" chart/values-vps.yaml
-          # Fail loudly if the edit produced an invalid overlay.
-          helm template fyers chart/ -f chart/values-vps.yaml \
-            --set-file configYaml=config.example.yaml >/dev/null
-          git --no-pager diff -- chart/values-vps.yaml
+          sed -i -E "s|^  tag: .*|  tag: \"${TAG}\"|" chart/values.yaml
+          # Fail loudly if the edit produced an invalid chart.
+          helm template fyers chart/ -f chart/values-local.yaml \
+            --set-file configYaml=config.yaml >/dev/null
+          git --no-pager diff -- chart/values.yaml
 
       - name: Commit & push
         env:
@@ -58,7 +58,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add chart/values-vps.yaml
+          git add chart/values.yaml
           if git diff --cached --quiet; then
             echo "already pinned to ${TAG} — nothing to commit"
           else
