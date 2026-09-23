@@ -44,7 +44,7 @@ helm upgrade --install fyers-collector chart/ \
 
 - `config.yaml` is **committed** (non-secret) — it is the deployed runtime config.
 - `chart/values.yaml` pins the image tag; `values-local.yaml` only adds the
-  cluster specifics (LoadBalancer, node pin, existing PVC).
+  cluster specifics (LoadBalancer, node pin, its own PVC).
 - `.env` is **not** committed. Provide it locally (`./.env`) or keep the
   `fyers-env` Secret already in the cluster.
 
@@ -82,16 +82,15 @@ kubectl create secret generic fyers-rclone \
     --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-## ⚠️ The old `fyers` release
+## Data lifecycle
 
-The **`fyers`** helm release (the previous chart) owns the `fyers-data` PVC via
-`meta.helm.sh/release-name`. Its workloads have been removed, but the release
-shell remains deliberately inert:
+The chart **owns** its PVC (`fyers-collector-data`) on the local cluster:
+created on install, deleted on `helm uninstall`. That is intentional — the
+volume is ephemeral by design. The nightly 23:15 job uploads the day to Drive
+(`gdrive:fyers-snapshots/…`) and then resets it, so the durable copy is always
+on Drive, never only on the PVC.
 
-> **Never run `helm uninstall fyers`** — it would delete the PVC and all
-> captured history. This chart mounts that claim read-write via
-> `storage.existingClaim`, and *this* release (`fyers-collector`) is safe to
-> uninstall because it never created the PVC.
+On the VPS overlay the same applies (a fresh claim is created).
 
 ## VPS
 

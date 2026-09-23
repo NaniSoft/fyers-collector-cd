@@ -13,11 +13,16 @@ service:
   type: LoadBalancer          # Docker Desktop publishes host 127.0.0.1:8001
 
 nodeSelector:
-  kubernetes.io/hostname: desktop-worker   # the PV is nodeAffinity-pinned to it
+  kubernetes.io/hostname: desktop-worker   # the PV is pinned to its first consumer
 
+# This release OWNS its claim (`fyers-collector-data`): a fresh PVC is created
+# on install and removed on `helm uninstall`. That is safe here because the data
+# is deliberately ephemeral — the nightly 23:15 job uploads the day to Drive and
+# resets the volume.
 storage:
-  existingClaim: fyers-data
-  fixPermissions: false       # the claim is already owned by uid 1000
+  existingClaim: ""
+  size: 10Gi
+  fixPermissions: true        # a brand-new local-path dir is root-owned
 
 rclone:
   enabled: true
